@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import com.picpaysimplificado.domain.user.User;
 import com.picpaysimplificado.repositories.UserRepository;
 
+import jakarta.transaction.Transactional;
+
 @Service
 public class UserService {
 	private final UserRepository userRepository;
@@ -16,7 +18,7 @@ public class UserService {
 	public UserService(UserRepository userRepository) {
 		this.userRepository = userRepository;
 	}
-
+	
 	public User findUserById(Long id) {
 		return userRepository.findUserById(id).orElseThrow(() -> new NoSuchElementException("Usuário não encontrado"));
 	}
