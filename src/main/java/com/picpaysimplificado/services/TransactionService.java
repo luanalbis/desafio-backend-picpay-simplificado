@@ -12,7 +12,7 @@ import org.springframework.web.client.RestTemplate;
 import com.picpaysimplificado.domain.transaction.Transaction;
 import com.picpaysimplificado.domain.user.User;
 import com.picpaysimplificado.domain.user.UserType;
-import com.picpaysimplificado.dto.TransactionDTO;
+import com.picpaysimplificado.dtos.TransactionDTO;
 import com.picpaysimplificado.repositories.TransactionRepository;
 
 import jakarta.transaction.Transactional;

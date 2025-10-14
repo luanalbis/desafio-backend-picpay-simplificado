@@ -2,6 +2,8 @@ package com.picpaysimplificado.domain.user;
 
 import java.math.BigDecimal;
 
+import com.picpaysimplificado.dtos.UserDTO;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,6 +26,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @EqualsAndHashCode(of = "id")
 public class User {
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -44,5 +47,15 @@ public class User {
 
 	@Enumerated(EnumType.STRING)
 	private UserType userType;
+
+	public User(UserDTO data) {
+		this.firstName = data.firstName();
+		this.lastName = data.lastName();
+		this.balance = data.balance();
+		this.document = data.document();
+		this.email = data.email();
+		this.password = data.password();
+		this.userType = data.userType();
+	}
 
 }
