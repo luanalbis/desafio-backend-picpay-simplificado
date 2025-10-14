@@ -34,6 +34,6 @@ public class UserController {
 
 	@GetMapping
 	public ResponseEntity<List<User>> getAllUsers() {
-		return ResponseEntity.status(HttpStatus.CREATED).body(service.getAllUsers());
+		return ResponseEntity.status(HttpStatus.OK).body(service.getAllUsers());
 	}
 }

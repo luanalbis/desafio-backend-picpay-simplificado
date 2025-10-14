@@ -2,8 +2,9 @@ package com.picpaysimplificado.services;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
-import org.hibernate.mapping.Map;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,22 +23,25 @@ public class TransactionService {
 	private final TransactionRepository repository;
 	private final UserService userService;
 	private final RestTemplate restTemplate;
+	private final NotificationService notificationService;
 
 	@Autowired
-	public TransactionService(TransactionRepository repository, UserService userService, RestTemplate restTemplate) {
+	public TransactionService(TransactionRepository repository, UserService userService, RestTemplate restTemplate,
+			NotificationService notificationService) {
 		this.repository = repository;
 		this.userService = userService;
 		this.restTemplate = restTemplate;
+		this.notificationService = notificationService;
 	}
 
 	@Transactional
-	public void createTransaction(TransactionDTO transactionDTO) {
+	public Transaction createTransaction(TransactionDTO transactionDTO) {
 		User sender = this.userService.findUserById(transactionDTO.senderId());
 		User receiver = this.userService.findUserById(transactionDTO.receiverId());
 
 		validateTransaction(sender, receiver, transactionDTO.value());
 
-		Transaction transaction = new Transaction();
+		var transaction = new Transaction();
 		transaction.setAmount(transactionDTO.value());
 		transaction.setSender(sender);
 		transaction.setReceiver(receiver);
@@ -49,9 +53,22 @@ public class TransactionService {
 		repository.save(transaction);
 		userService.saveUser(sender);
 		userService.saveUser(receiver);
+
+		try {
+			var senderMessage = "Transação de " + transactionDTO.value() + "realizada com sucesso";
+			var receiverrMessage = "Transação de " + transactionDTO.value() + "recebida com sucesso";
+
+			notificationService.sendNotification(sender, senderMessage);
+			notificationService.sendNotification(receiver, receiverrMessage);
+
+		} catch (Exception e) {
+			System.out.println(e.getMessage());
+		}
+
+		return transaction;
 	}
 
-	public void validateTransaction(User sender, User receiver, BigDecimal amount) {
+	private void validateTransaction(User sender, User receiver, BigDecimal amount) {
 
 		if (sender.getUserType() == UserType.MERCHANT) {
 			throw new IllegalArgumentException("Lojistas não podem enviar dinheiro");
@@ -67,8 +84,13 @@ public class TransactionService {
 
 	}
 
-	public boolean authorizeTransaction(User sender, BigDecimal value) {
+	private boolean authorizeTransaction(User sender, BigDecimal value) {
 		String url = "https://util.devi.tools/api/v2/authorize";
 		return restTemplate.getForEntity(url, Map.class).getStatusCode() == HttpStatus.OK;
+	}
+
+	public List<Transaction> getAllTransactions() {
+
+		return repository.findAll();
 	}
 }
