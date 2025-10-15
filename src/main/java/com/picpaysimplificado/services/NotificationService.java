@@ -8,6 +8,7 @@ import org.springframework.web.client.RestTemplate;
 
 import com.picpaysimplificado.domain.user.User;
 import com.picpaysimplificado.dtos.NotificationDTO;
+import com.picpaysimplificado.exceptions.NotificationFailedException;
 
 @Service
 public class NotificationService {
@@ -26,7 +27,7 @@ public class NotificationService {
 
 		if (response.getStatusCode() != HttpStatus.OK) {
 			System.out.println("Erro ao enviar notificação");
-			throw new IllegalStateException("Serviço de notificação indisponível");
+			throw new NotificationFailedException("Serviço de notificação indisponível");
 		}
 
 	}

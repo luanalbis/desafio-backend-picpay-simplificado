@@ -3,17 +3,21 @@ package com.picpaysimplificado.services;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-
 import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import com.picpaysimplificado.domain.transaction.Transaction;
 import com.picpaysimplificado.domain.user.User;
 import com.picpaysimplificado.domain.user.UserType;
 import com.picpaysimplificado.dtos.TransactionDTO;
+import com.picpaysimplificado.exceptions.InsufficientBalanceException;
+import com.picpaysimplificado.exceptions.UnauthorizedTransactionException;
+import com.picpaysimplificado.exceptions.UserNotAllowedException;
 import com.picpaysimplificado.repositories.TransactionRepository;
 
 import jakarta.transaction.Transactional;
@@ -51,8 +55,8 @@ public class TransactionService {
 		receiver.setBalance(receiver.getBalance().add(transactionDTO.value()));
 
 		repository.save(transaction);
-		userService.saveUser(sender);
-		userService.saveUser(receiver);
+		userService.updateUser(sender);
+		userService.updateUser(receiver);
 
 		try {
 			var senderMessage = "Transação de " + transactionDTO.value() + "realizada com sucesso";
@@ -71,22 +75,30 @@ public class TransactionService {
 	private void validateTransaction(User sender, User receiver, BigDecimal amount) {
 
 		if (sender.getUserType() == UserType.MERCHANT) {
-			throw new IllegalArgumentException("Lojistas não podem enviar dinheiro");
+			throw new UserNotAllowedException("Lojistas não podem enviar dinheiro");
 		}
 
 		if (sender.getBalance().compareTo(amount) == -1) {
-			throw new IllegalArgumentException("Saldo insuficiente para transferência");
+			throw new InsufficientBalanceException("Saldo insuficiente para transferência");
 		}
 
 		if (!authorizeTransaction(sender, amount)) {
-			throw new IllegalStateException("Transferência não autorizada");
+			throw new UnauthorizedTransactionException("Transferência não autorizada");
 		}
 
 	}
 
 	private boolean authorizeTransaction(User sender, BigDecimal value) {
 		String url = "https://util.devi.tools/api/v2/authorize";
-		return restTemplate.getForEntity(url, Map.class).getStatusCode() == HttpStatus.OK;
+		try {
+			return restTemplate.getForEntity(url, Map.class).getStatusCode() == HttpStatus.OK;
+		} catch (HttpClientErrorException.Forbidden ex) {
+
+			throw new UnauthorizedTransactionException();
+		} catch (Exception ex) {
+
+			throw new RuntimeException();
+		}
 	}
 
 	public List<Transaction> getAllTransactions() {

@@ -29,17 +29,11 @@ public class TransactionController {
 
 	@PostMapping
 	public ResponseEntity<Transaction> createTransaction(@RequestBody TransactionDTO data) {
-		try {
-			return ResponseEntity.status(HttpStatus.CREATED).body(service.createTransaction(data));
-		} catch (Exception e) {
-			System.out.println(e.getMessage());
-			return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
-		}
-
+		return ResponseEntity.status(HttpStatus.CREATED).body(service.createTransaction(data));
 	}
 
 	@GetMapping
-	public ResponseEntity<List<Transaction>> getAllTransaction() {
+	public ResponseEntity<List<Transaction>> getAllTransactions() {
 		return ResponseEntity.status(HttpStatus.OK).body(service.getAllTransactions());
 	}
 }
