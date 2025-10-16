@@ -55,7 +55,7 @@ public class TransactionService {
 		sender.setBalance(sender.getBalance().subtract(transactionDTO.value()));
 		receiver.setBalance(receiver.getBalance().add(transactionDTO.value()));
 
-		repository.save(transaction);
+		Transaction newTransaction = repository.save(transaction);
 		userService.updateUser(sender);
 		userService.updateUser(receiver);
 
@@ -70,7 +70,7 @@ public class TransactionService {
 			System.out.println(e.getMessage());
 		}
 
-		return transaction;
+		return newTransaction;
 	}
 
 	private void validateTransaction(User sender, User receiver, BigDecimal amount) {

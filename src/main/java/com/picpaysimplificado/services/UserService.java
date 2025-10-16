@@ -32,11 +32,17 @@ public class UserService {
 		return repository.findAll();
 	}
 
-	public void updateUser(User user) {
-		if (!repository.existsById(user.getId())) {
-			throw new UserNotFoundException();
+	public User updateUser(User user) {
+		User finded = repository.findById(user.getId()).orElseThrow(() -> new UserNotFoundException());
+		if (!user.getDocument().equals(finded.getDocument()) && repository.existsByDocument(user.getDocument())) {
+			throw new DuplicateUserException("Documento já cadastrado");
 		}
-		repository.save(user);
+
+		if (!user.getEmail().equals(finded.getEmail()) && repository.existsByEmail(user.getEmail())) {
+			throw new DuplicateUserException("Email já cadastrado");
+		}
+
+		return repository.save(user);
 	}
 
 	public User getUserById(Long id) {

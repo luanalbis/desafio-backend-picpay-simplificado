@@ -58,4 +58,8 @@ public class User {
 		this.userType = data.userType();
 	}
 
+	public UserDTO toDTO() {
+		return new UserDTO(firstName, lastName, document, balance, email, password, this.userType);
+	}
+
 }
