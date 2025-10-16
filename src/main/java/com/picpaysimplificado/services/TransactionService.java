@@ -16,6 +16,7 @@ import com.picpaysimplificado.domain.user.User;
 import com.picpaysimplificado.domain.user.UserType;
 import com.picpaysimplificado.dtos.TransactionDTO;
 import com.picpaysimplificado.exceptions.InsufficientBalanceException;
+import com.picpaysimplificado.exceptions.InvalidTransactionAmountException;
 import com.picpaysimplificado.exceptions.UnauthorizedTransactionException;
 import com.picpaysimplificado.exceptions.UserNotAllowedException;
 import com.picpaysimplificado.repositories.TransactionRepository;
@@ -40,8 +41,8 @@ public class TransactionService {
 
 	@Transactional
 	public Transaction createTransaction(TransactionDTO transactionDTO) {
-		User sender = this.userService.findUserById(transactionDTO.senderId());
-		User receiver = this.userService.findUserById(transactionDTO.receiverId());
+		User sender = this.userService.getUserById(transactionDTO.senderId());
+		User receiver = this.userService.getUserById(transactionDTO.receiverId());
 
 		validateTransaction(sender, receiver, transactionDTO.value());
 
@@ -73,6 +74,9 @@ public class TransactionService {
 	}
 
 	private void validateTransaction(User sender, User receiver, BigDecimal amount) {
+		if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+			throw new InvalidTransactionAmountException();
+		}
 
 		if (sender.getUserType() == UserType.MERCHANT) {
 			throw new UserNotAllowedException("Lojistas não podem enviar dinheiro");
@@ -89,7 +93,7 @@ public class TransactionService {
 	}
 
 	private boolean authorizeTransaction(User sender, BigDecimal value) {
-		String url = "https://util.devi.tools/api/v2/authorize";
+		var url = "https://util.devi.tools/api/v2/authorize";
 		try {
 			return restTemplate.getForEntity(url, Map.class).getStatusCode() == HttpStatus.OK;
 		} catch (HttpClientErrorException.Forbidden ex) {

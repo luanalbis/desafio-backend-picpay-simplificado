@@ -15,6 +15,8 @@ import com.picpaysimplificado.domain.transaction.Transaction;
 import com.picpaysimplificado.dtos.TransactionDTO;
 import com.picpaysimplificado.services.TransactionService;
 
+import jakarta.validation.Valid;
+
 @RestController
 @RequestMapping("/transactions")
 
@@ -28,7 +30,7 @@ public class TransactionController {
 	}
 
 	@PostMapping
-	public ResponseEntity<Transaction> createTransaction(@RequestBody TransactionDTO data) {
+	public ResponseEntity<Transaction> createTransaction(@Valid @RequestBody TransactionDTO data) {
 		return ResponseEntity.status(HttpStatus.CREATED).body(service.createTransaction(data));
 	}
 

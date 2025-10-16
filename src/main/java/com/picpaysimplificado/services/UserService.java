@@ -16,12 +16,8 @@ public class UserService {
 	private final UserRepository repository;
 
 	@Autowired
-	public UserService(UserRepository userRepository) {
-		this.repository = userRepository;
-	}
-
-	public User findUserById(Long id) {
-		return repository.findUserById(id).orElseThrow(() -> new UserNotFoundException("Usuário não encontrado"));
+	public UserService(UserRepository repository) {
+		this.repository = repository;
 	}
 
 	public User createUser(UserDTO data) {
@@ -41,6 +37,10 @@ public class UserService {
 			throw new UserNotFoundException();
 		}
 		repository.save(user);
+	}
+
+	public User getUserById(Long id) {
+		return repository.findUserById(id).orElseThrow(() -> new UserNotFoundException("Usuário não encontrado"));
 	}
 
 }
