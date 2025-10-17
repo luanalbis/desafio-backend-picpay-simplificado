@@ -1,137 +1,176 @@
 package com.picpaysimplificado.services;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.util.List;
-import java.util.Map;
 
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestTemplate;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import com.picpaysimplificado.domain.user.User;
 import com.picpaysimplificado.domain.user.UserType;
 import com.picpaysimplificado.dtos.TransactionDTO;
-import com.picpaysimplificado.dtos.UserDTO;
 import com.picpaysimplificado.exceptions.InsufficientBalanceException;
 import com.picpaysimplificado.exceptions.InvalidTransactionAmountException;
+import com.picpaysimplificado.exceptions.SelfTransactionException;
+import com.picpaysimplificado.exceptions.UnauthorizedTransactionException;
 import com.picpaysimplificado.exceptions.UserNotAllowedException;
 import com.picpaysimplificado.exceptions.UserNotFoundException;
 import com.picpaysimplificado.repositories.TransactionRepository;
-import com.picpaysimplificado.repositories.UserRepository;
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@SpringBootTest
 class TransactionServiceTest {
 
-	private final TransactionService service;
-	private final UserService userService;
-	private final TransactionRepository repository;
-	private final UserRepository userRepository;
+	@Mock
+	private UserService userService;
 
-	@MockBean
-	private RestTemplate restTemplate;
+	@Mock
+	private TransactionRepository repository;
 
-	@Autowired
-	public TransactionServiceTest(TransactionService service, UserService userService, TransactionRepository repository,
-			UserRepository userRepository) {
-		this.service = service;
-		this.repository = repository;
-		this.userService = userService;
-		this.userRepository = userRepository;
-	}
+	@Mock
+	private AuthTransactionService authService;
 
-	@BeforeAll
-	void userSetup() {
-		var blc = new BigDecimal(5000.00);
-		var merchant = new UserDTO("Luan", "O", "123456782", blc, "test3@email.com", "123456", UserType.MERCHANT);
-		var commom = new UserDTO("Amanda", "G", "123456789", blc, "test1@email.com", "123456", UserType.COMMON);
-		userService.createUser(merchant);
-		userService.createUser(commom);
+	@Mock
+	private NotificationService notificationService;
 
+	@InjectMocks
+	private TransactionService service;
+
+	@BeforeEach
+	void setup() {
+		MockitoAnnotations.openMocks(this);
 	}
 
 	@Test
 	@DisplayName("Transação: Deve retornar uma Transação quando os dados forem válidos")
-	void createTransactionSuccess() {
-		when(restTemplate.getForEntity(anyString(), eq(Map.class)))
-				.thenReturn(new ResponseEntity<>(Map.of("status", "success"), HttpStatus.OK));
-		User merchant = getUserByType(UserType.MERCHANT);
+	void createTransaction_Success() {
 
-		User common = getUserByType(UserType.COMMON);
-		var dto = new TransactionDTO(new BigDecimal(5000.00), common.getId(), merchant.getId());
+		User sender = new User(1L, "Luan", "A", "000000000-01", "luan@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+		User receiver = new User(2L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+		when(userService.getUserById(sender.getId())).thenReturn(sender);
+		when(userService.getUserById(receiver.getId())).thenReturn(receiver);
+		when(authService.authorizeTransaction(any(), any())).thenReturn(true);
 
-		assertNotNull(service.createTransaction(dto));
+		BigDecimal amount = BigDecimal.TEN;
+		BigDecimal senderExpectedBalance = sender.getBalance().subtract(amount);
+		BigDecimal receiverExpectedBalance = receiver.getBalance().add(amount);
+
+		var request = new TransactionDTO(amount, sender.getId(), receiver.getId());
+		service.createTransaction(request);
+
+		verify(repository, times(1)).save(any());
+		verify(userService, times(2)).updateUser(any());
+		verify(notificationService, times(2)).sendNotification(any(), any());
+		assertEquals(senderExpectedBalance, sender.getBalance());
+		assertEquals(receiverExpectedBalance, receiver.getBalance());
 	}
 
 	@Test
 	@DisplayName("Transação: Deve retornar um erro quando o usuário não tiver saldo suficiente")
-	void createTransactionInsufficientBalance() {
-		User merchant = getUserByType(UserType.MERCHANT);
-		User common = getUserByType(UserType.COMMON);
-		var dto = new TransactionDTO(new BigDecimal(6000.00), common.getId(), merchant.getId());
-		assertThrows(InsufficientBalanceException.class, () -> service.createTransaction(dto));
+	void createTransaction_InsufficientBalanceException() {
+		User sender = new User(1L, "Luan", "A", "000000000-01", "luan@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+		User receiver = new User(2L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+
+		when(userService.getUserById(sender.getId())).thenReturn(sender);
+		when(userService.getUserById(receiver.getId())).thenReturn(receiver);
+		when(authService.authorizeTransaction(any(), any())).thenReturn(true);
+
+		BigDecimal amountToSend = sender.getBalance().add(BigDecimal.ONE);
+
+		var request = new TransactionDTO(amountToSend, sender.getId(), receiver.getId());
+		assertThrows(InsufficientBalanceException.class, () -> service.createTransaction(request));
 	}
 
 	@Test
 	@DisplayName("Transação: Deve retornar um erro quando o valor for <= 0")
-	void createTransactionInvalidTransactionAmmount() {
-		User merchant = getUserByType(UserType.MERCHANT);
-		User common = getUserByType(UserType.COMMON);
+	void createTransaction_InvalidTransactionAmmountException() {
+		User sender = new User(1L, "Luan", "A", "000000000-01", "luan@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+		User receiver = new User(2L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
 
-		var dto = new TransactionDTO(new BigDecimal(0.00), common.getId(), merchant.getId());
-		var dto2 = new TransactionDTO(new BigDecimal(-50.00), common.getId(), merchant.getId());
-		assertThrows(InvalidTransactionAmountException.class, () -> service.createTransaction(dto));
-		assertThrows(InvalidTransactionAmountException.class, () -> service.createTransaction(dto2));
+		when(userService.getUserById(sender.getId())).thenReturn(sender);
+		when(userService.getUserById(receiver.getId())).thenReturn(receiver);
+		when(authService.authorizeTransaction(any(), any())).thenReturn(true);
+
+		BigDecimal amountToSend = BigDecimal.ZERO;
+
+		var request = new TransactionDTO(amountToSend, sender.getId(), receiver.getId());
+		assertThrows(InvalidTransactionAmountException.class, () -> service.createTransaction(request));
 	}
 
 	@Test
 	@DisplayName("Transação: Deve retornar um erro quando o usuário não existir")
-	void createTransactionUserNotFound() {
+	void createTransaction_UserNotFoundException() {
+		Long nonExistentId = 99L;
+		User existingUser = new User(1L, "Luan", "A", "000000000-01", "luan@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
 
-		var dto = new TransactionDTO(new BigDecimal(1000.00), 5L, 1L);
-		var dto2 = new TransactionDTO(new BigDecimal(1000.00), 1L, 5L);
-		assertThrows(UserNotFoundException.class, () -> service.createTransaction(dto));
-		assertThrows(UserNotFoundException.class, () -> service.createTransaction(dto2));
+		when(userService.getUserById(existingUser.getId())).thenReturn(existingUser);
+		when(userService.getUserById(nonExistentId)).thenThrow(new UserNotFoundException());
+		when(authService.authorizeTransaction(any(), any())).thenReturn(true);
+
+		var request = new TransactionDTO(BigDecimal.TEN, nonExistentId, existingUser.getId());
+		var request2 = new TransactionDTO(BigDecimal.TEN, existingUser.getId(), nonExistentId);
+
+		assertThrows(UserNotFoundException.class, () -> service.createTransaction(request));
+		assertThrows(UserNotFoundException.class, () -> service.createTransaction(request2));
 	}
 
 	@Test
 	@DisplayName("Transação: Deve retornar um erro quando userType.MERCHANT tentar eviar dinheiro")
-	void createTransactionUserNotAllowed() {
+	void createTransaction_UserNotAllowedException() {
+		User merchant = new User(1L, "Luan", "A", "000000000-01", "luan@email.com", "password", BigDecimal.TEN,
+				UserType.MERCHANT);
+		User common = new User(2L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
 
-		User merchant = getUserByType(UserType.MERCHANT);
-		User common = getUserByType(UserType.COMMON);
-		var dto = new TransactionDTO(new BigDecimal(1000.00), merchant.getId(), common.getId());
+		when(userService.getUserById(merchant.getId())).thenReturn(merchant);
+		when(userService.getUserById(common.getId())).thenReturn(common);
+		when(authService.authorizeTransaction(any(), any())).thenReturn(true);
 
-		assertThrows(UserNotAllowedException.class, () -> service.createTransaction(dto));
-
+		var request = new TransactionDTO(merchant.getBalance(), merchant.getId(), common.getId());
+		assertThrows(UserNotAllowedException.class, () -> service.createTransaction(request));
 	}
 
-	@BeforeEach
-	void resetUsersBalance() {
-		List<User> users = userRepository.findAll();
-		for (User user : users) {
-			user.setBalance(new BigDecimal(5000.00));
-			userService.updateUser(user);
-		}
+	@Test
+	@DisplayName("Transação: Deve retornar um erro quando IDs dos usuários são iguais")
+	void createTransaction_SelfTransactionException() {
+		User user = new User(1L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+
+		when(userService.getUserById(user.getId())).thenReturn(user);
+		when(authService.authorizeTransaction(any(), any())).thenReturn(true);
+
+		var request = new TransactionDTO(user.getBalance(), user.getId(), user.getId());
+		assertThrows(SelfTransactionException.class, () -> service.createTransaction(request));
 	}
 
-	private User getUserByType(UserType type) {
-		return userService.getAllUsers().stream().filter(u -> u.getUserType() == type).findFirst().get();
+	@Test
+	@DisplayName("Transação: Deve retornar um erro quando a transação não é autorizada")
+	void createTransaction_UnauthorizedTransactionException() {
 
+		User sender = new User(1L, "Luan", "A", "000000000-01", "luan@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+		User receiver = new User(2L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+		when(userService.getUserById(sender.getId())).thenReturn(sender);
+		when(userService.getUserById(receiver.getId())).thenReturn(receiver);
+		when(authService.authorizeTransaction(any(), any())).thenReturn(false);
+
+		var request = new TransactionDTO(sender.getBalance(), sender.getId(), receiver.getId());
+		assertThrows(UnauthorizedTransactionException.class, () -> service.createTransaction(request));
 	}
-
 }

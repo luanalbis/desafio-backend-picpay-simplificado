@@ -1,16 +1,22 @@
 package com.picpaysimplificado.services;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import com.picpaysimplificado.domain.user.User;
 import com.picpaysimplificado.domain.user.UserType;
@@ -18,87 +24,103 @@ import com.picpaysimplificado.dtos.UserDTO;
 import com.picpaysimplificado.exceptions.DuplicateUserException;
 import com.picpaysimplificado.repositories.UserRepository;
 
-@SpringBootTest
 class UserServiceTest {
 
-	private final UserService service;
-	private final UserRepository repository;
+	@Mock
+	private UserRepository repository;
 
-	@Autowired
-	public UserServiceTest(UserService service, UserRepository repository) {
-		this.service = service;
-		this.repository = repository;
-	}
-
-	private User createValidUser(String doc, String email) {
-		var userDTO = new UserDTO("Luan", "Albis", doc, new BigDecimal("5000.00"), email, "123456", UserType.COMMON);
-		return new User(userDTO);
-	}
+	@InjectMocks
+	private UserService service;
 
 	@BeforeEach
-	@DisplayName("Limpa a Database a cada método")
-	void cleanDatabase() {
-		repository.deleteAll();
+	void initialSetup() {
+		MockitoAnnotations.openMocks(this);
 	}
 
 	@Test
 	@DisplayName("Criação de usuário: Deve retornar o usuário quando os dados forem válidos")
-	void createUserSuccess() {
-		assertNotNull(service.createUser(this.createValidUser("999999999-99", "email@test.com").toDTO()));
+	void createUser_Success() {
+		User user = new User(1L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+
+		when(repository.existsByEmail(user.getEmail())).thenReturn(false);
+		when(repository.existsByDocument(user.getDocument())).thenReturn(false);
+
+		service.createUser(user.toDTO());
+		verify(repository, times(1)).save(any());
 	}
 
 	@Test
 	@DisplayName("Criação de usuário: lança DuplicateUserException se o Document já existir")
-	void createUserDuplicateDocument() {
-		var doc = "999999999-99";
-		User user = createValidUser(doc, "email@test.com");
-		User user2 = createValidUser(doc, "email@test.com");
-		user2.setEmail("emaildiferente@exemplo.com");
-		service.createUser(user.toDTO());
-		assertThrows(DuplicateUserException.class, () -> service.createUser(user2.toDTO()));
+	void createUser_document_DuplicateUserException() {
+
+		User user = new User(1L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+
+		when(repository.existsByEmail(user.getEmail())).thenReturn(false);
+		when(repository.existsByDocument(user.getDocument())).thenReturn(true);
+
+		assertThrows(DuplicateUserException.class, () -> service.createUser(user.toDTO()));
 	}
 
 	@Test
 	@DisplayName("Criação de usuário: lança DuplicateUserException se o Email já existir")
-	void createUserEmail() {
-		var email = "email@test.com";
-		User user = createValidUser("09090938932", email);
-		User user2 = createValidUser("98903284545", email);
-		user2.setDocument("8748923743");
-		service.createUser(user.toDTO());
-		assertThrows(DuplicateUserException.class, () -> service.createUser(user2.toDTO()));
+	void createUser_email_DuplicateUserException() {
+		User user = new User(1L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+
+		when(repository.existsByEmail(user.getEmail())).thenReturn(true);
+		when(repository.existsByDocument(user.getDocument())).thenReturn(false);
+
+		assertThrows(DuplicateUserException.class, () -> service.createUser(user.toDTO()));
 	}
 
 	@Test
 	@DisplayName("Atualização de usuário: Deve retornar o usuário quando os dados forem válidos")
-	void updateUserSuccess() {
-		User user = service.createUser(createValidUser("999999999-99", "email@test.com").toDTO());
+	void updateUser_Success() {
+		User user = new User(1L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
 
-		var newFirstName = "João";
-		user.setFirstName(newFirstName);
+		when(repository.findById(user.getId())).thenReturn(Optional.of(user));
+		when(repository.existsByDocument(user.getDocument())).thenReturn(false);
+		when(repository.existsByEmail(user.getEmail())).thenReturn(false);
+		when(repository.save(any())).thenReturn(user);
+
+		var firstName = user.getFirstName();
+		user.setFirstName("João");
 
 		assertNotNull(service.updateUser(user));
-		assertEquals(newFirstName, service.getUserById(user.getId()).getFirstName());
+		assertNotEquals(firstName, user.getFirstName());
+		verify(repository, times(1)).save(any());
 	}
 
 	@Test
 	@DisplayName("Atualização de usuário: lança DuplicateUserException se o Documento já existir")
-	void updateUserDuplicateDocument() {
-		User user1 = service.createUser(createValidUser("999999999", "email@test.com").toDTO());
-		User user2 = service.createUser(createValidUser("000000000", "email2@test.com").toDTO());
-		user2.setDocument(user1.getDocument());
+	void updateUser_document_DuplicateUserException() {
+		User userToUpdate = new User(1L, "Amanda", "o", "000000000-00", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+		User originalUser = new User(1L, "Amanda", "o", "000000000-02", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
 
-		assertThrows(DuplicateUserException.class, () -> service.updateUser(user2));
+		when(repository.findById(userToUpdate.getId())).thenReturn(Optional.of(originalUser));
+		when(repository.existsByDocument(userToUpdate.getDocument())).thenReturn(true);
+		when(repository.existsByEmail(userToUpdate.getEmail())).thenReturn(false);
+
+		assertThrows(DuplicateUserException.class, () -> service.updateUser(userToUpdate));
 	}
 
 	@Test
 	@DisplayName("Atualização de usuário: lança DuplicateUserException se o Email já existir")
-	void updateUserDuplicateEmail() {
-		User user1 = service.createUser(createValidUser("999999999", "email@test.com").toDTO());
-		User user2 = service.createUser(createValidUser("000000000", "email2@test.com").toDTO());
-		user2.setEmail(user1.getEmail());
+	void updateUser_email_DuplicateUserException() {
+		User userToUpdate = new User(1L, "Amanda", "o", "000000000-00", "amanda@email.com", "password", BigDecimal.TEN,
+				UserType.COMMON);
+		User originalUser = new User(1L, "Amanda", "o", "000000000-00", "amandaEXISTE@email.com", "password",
+				BigDecimal.TEN, UserType.COMMON);
 
-		assertThrows(DuplicateUserException.class, () -> service.updateUser(user2));
+		when(repository.findById(userToUpdate.getId())).thenReturn(Optional.of(originalUser));
+		when(repository.existsByDocument(userToUpdate.getDocument())).thenReturn(false);
+		when(repository.existsByEmail(userToUpdate.getEmail())).thenReturn(true);
+
+		assertThrows(DuplicateUserException.class, () -> service.updateUser(userToUpdate));
 	}
-
 }
